@@ -1,0 +1,70 @@
+/* ======= Uno R3 PAN Servo (MG90S) – Smooth + Serial Control (115200) =======
+   Commands:
+     "HOME"        -> go to 90°
+     "<angle>"     -> absolute angle, e.g. "123.4"
+   Wiring:
+     D9  -> servo signal
+     5V  -> servo +
+     GND -> servo -
+   Notes: No external PSU (per request). Soft limits + accel/vel limiting.
+============================================================================ */
+
+#include <Servo.h>
+
+const uint8_t SERVO_PIN = 9;
+const int SERVO_MIN_US = 600, SERVO_MAX_US = 2400;
+const float ANG_MIN = 15.0f, ANG_MAX = 165.0f, ANG_CENTER = 90.0f;
+
+const unsigned long LOOP_MS = 10;            // 100 Hz internal loop
+const float MAX_VEL_DEG_PER_TICK = 1.2f;     // 120 deg/s @ 100 Hz
+const float MAX_ACC_DEG_PER_TICK2 = 0.35f;   // gentle accel
+
+Servo s;
+float targetDeg = ANG_CENTER, posDeg = ANG_CENTER, velDeg = 0.0f;
+unsigned long tPrev = 0;
+
+int degToUs(float deg){
+  float d = constrain(deg, ANG_MIN, ANG_MAX);
+  float a = (d - ANG_MIN) / (ANG_MAX - ANG_MIN);
+  return SERVO_MIN_US + (int)(a * (SERVO_MAX_US - SERVO_MIN_US));
+}
+inline void writeServo(){ s.writeMicroseconds(degToUs(posDeg)); }
+
+void home(){ targetDeg = ANG_CENTER; }
+
+void parseLine(String line){
+  line.trim(); if (!line.length()) return;
+  if (line == "HOME") { home(); return; }
+  float a = line.toFloat();
+  if (!isnan(a)) targetDeg = constrain(a, ANG_MIN, ANG_MAX);
+}
+
+void setup(){
+  Serial.begin(115200);
+  s.attach(SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
+  posDeg = ANG_CENTER; velDeg = 0; writeServo();
+  delay(200);
+  Serial.println("RDY");
+}
+
+void loop(){
+  while (Serial.available()){
+    String l = Serial.readStringUntil('\n');
+    parseLine(l);
+  }
+
+  unsigned long now = millis();
+  if (now - tPrev >= LOOP_MS){
+    tPrev = now;
+    float err = targetDeg - posDeg;
+
+    float v_des = constrain(err * 0.20f, -MAX_VEL_DEG_PER_TICK, MAX_VEL_DEG_PER_TICK);
+    float dv = v_des - velDeg;
+    dv = constrain(dv, -MAX_ACC_DEG_PER_TICK2, MAX_ACC_DEG_PER_TICK2);
+    velDeg += dv;
+
+    posDeg += velDeg;
+    posDeg = constrain(posDeg, ANG_MIN, ANG_MAX);
+    writeServo();
+  }
+}

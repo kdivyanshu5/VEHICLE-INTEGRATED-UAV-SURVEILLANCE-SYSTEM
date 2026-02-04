@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Detection Gallery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+/* Page base */
+:root{
+  --content-max:1100px;
+  --card-bg: #fff;
+  --card-color: #222;
+  --panel-alpha: 0.92;
+}
+*{box-sizing:border-box}
+body {
+  margin: 0;
+  font-family: system-ui, Arial, sans-serif;
+  color: #fff;
+  min-height: 100vh;
+  /* let background video show through - main wrappers will be opaque */
+}
+
+/* === Video background === */
+.bg-video-wrap{
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: -2; /* behind everything */
+  pointer-events: none;
+}
+#bgVideo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: auto;
+  height: 120%;
+  min-width: 100%;
+  min-height: 100%;
+  transform: translate(-50%, -50%);
+  object-fit: cover;
+  filter: blur(8px) brightness(.65);
+  -webkit-filter: blur(8px) brightness(.65);
+}
+
+/* dark overlay to improve legibility */
+.bg-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(6,12,28,0.35);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Header */
+header {
+  background: rgba(255,255,255,var(--panel-alpha));
+  color: var(--card-color);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Filters panel */
+.filters {
+  margin: 20px auto;
+  max-width: var(--content-max);
+  background: rgba(255,255,255,var(--panel-alpha));
+  color: var(--card-color);
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 8px 30px rgba(3,8,22,0.25);
+}
+.filters input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e6e6e6;
+  font-size: 14px;
+}
+
+/* Grid and cards */
+.grid {
+  max-width: var(--content-max);
+  margin: 20px auto 60px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill,minmax(240px,1fr));
+  gap: 20px;
+  padding: 0 12px;
+}
+.card {
+  background: var(--card-bg);
+  color: var(--card-color);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(2,6,18,0.18);
+  transition: transform .18s, box-shadow .18s;
+}
+.card:hover { transform: translateY(-6px); box-shadow: 0 18px 44px rgba(2,6,18,0.22); }
+.card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+  background: #f3f6fb;
+}
+.card-body { padding: 12px; }
+.stat { display:flex; justify-content:space-between; font-weight:600; margin-top:6px; }
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  background: linear-gradient(180deg,#071021,#102433);
+  padding: 16px;
+  border-radius: 10px;
+  position: relative;
+  color: #eaf4ff;
+  max-width: 94%;
+  max-height: 94%;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  align-items:center;
+}
+.modal-content img {
+  max-width: 88vw;
+  max-height: 72vh;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+.close {
+  position:absolute;
+  top:8px;
+  right:12px;
+  font-size:22px;
+  cursor:pointer;
+  background:transparent;
+  border:none;
+  color:#fff;
+}
+
+/* Responsive: disable heavy video on small screens */
+@media (max-width: 800px){
+  #bgVideo { display:none; }
+  .bg-overlay { background: rgba(6,12,28,0.6); }
+  .card img{ height: 140px; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- Video background (autoplay, muted, loop). Use Flask static helper for path -->
+<div class="bg-video-wrap" aria-hidden="true">
+  <video id="bgVideo" autoplay muted loop playsinline>
+    <source src="{{ url_for('static', filename='videos/background.mp4') }}" type="video/mp4">
+    <!-- fallback image if video not supported -->
+  </video>
+</div>
+<div class="bg-overlay" aria-hidden="true"></div>
+
+<header>
+  <div>
+    <strong>Detection Gallery</strong><br>
+    Total: <span id="total">{{ images|length }}</span>
+  </div>
+  <a href="/logout" style="color:red;text-decoration:none;font-weight:600">Logout</a>
+</header>
+
+<div class="filters">
+  <input id="search" placeholder="Search filename">
+  <input id="minConf" type="number" step="0.01" placeholder="Min confidence">
+  <input id="minCount" type="number" step="1" placeholder="Min count">
+</div>
+
+<div class="grid" id="grid">
+{% for it in images %}
+<div class="card"
+     data-file="{{ it.filename }}"
+     data-conf="{{ it.avg_conf }}"
+     data-count="{{ it.det_count }}">
+  <img src="/image/{{ it.filename }}" alt="{{ it.filename }}">
+  <div class="card-body">
+    <div>{{ it.datetime }}</div>
+    <div class="stat"><span>Avg Conf</span><span>{{ it.avg_conf }}</span></div>
+    <div class="stat"><span>Count</span><span>{{ it.det_count }}</span></div>
+  </div>
+</div>
+{% endfor %}
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-content">
+    <button class="close" onclick="closeModal()">✕</button>
+    <img id="modalImg" alt="image">
+    <div style="width:100%; display:flex; justify-content:space-between; color:#bfdffb; font-weight:600;">
+      <div id="modalFile"></div>
+      <div id="modalMeta"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const cards = Array.from(document.querySelectorAll('.card'));
+const total = document.getElementById('total');
+
+function applyFilters() {
+  const q = search.value.trim().toLowerCase();
+  const minConfVal = parseFloat(minConf.value) || 0;
+  const minCountVal = parseInt(minCount.value, 10) || 0;
+
+  let visible = 0;
+  cards.forEach(c => {
+    const filename = c.dataset.file.toLowerCase();
+    const conf = parseFloat(c.dataset.conf) || 0;
+    const count = parseInt(c.dataset.count, 10) || 0;
+
+    const ok =
+      filename.includes(q) &&
+      conf >= minConfVal &&
+      count >= minCountVal;
+
+    c.style.display = ok ? "" : "none";
+    if (ok) visible++;
+  });
+  total.textContent = visible;
+}
+
+search.oninput = minConf.oninput = minCount.oninput = applyFilters;
+
+cards.forEach(c => {
+  c.onclick = () => {
+    modalImg.src = "/image/" + c.dataset.file;
+    document.getElementById('modalFile').textContent = c.dataset.file;
+    document.getElementById('modalMeta').textContent = `Avg Conf: ${parseFloat(c.dataset.conf).toFixed(2)} · Count: ${c.dataset.count}`;
+    document.getElementById('modal').classList.remove('hidden');
+  };
+});
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  modalImg.src = "";
+}
+
+document.getElementById('modal').onclick = e => { if (e.target === document.getElementById('modal')) closeModal(); };
+
+// Optional: pause video when modal open to reduce CPU/bandwidth
+const bgVideo = document.getElementById('bgVideo');
+const modalEl = document.getElementById('modal');
+function pauseVideo() {
+  try{ bgVideo.pause(); }catch(e){}
+}
+function playVideo() {
+  try{ bgVideo.play(); }catch(e){}
+}
+modalEl.addEventListener('transitionstart', () => pauseVideo());
+modalEl.addEventListener('transitionend', () => playVideo());
+</script>
+
+</body>
+</html>
